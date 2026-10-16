@@ -28,6 +28,12 @@ public class SolicitudModel {
     @Column(nullable = false, length = 100)
     private String vecinoEmail;
 
+    @Column(length = 200)
+    private String direccion;
+
+    @Column(length = 500)
+    private String descripcion;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private EstadoSolicitud estado;

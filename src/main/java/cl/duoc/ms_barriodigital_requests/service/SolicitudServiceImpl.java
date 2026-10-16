@@ -26,6 +26,8 @@ public class SolicitudServiceImpl implements SolicitudService {
         SolicitudModel model = SolicitudModel.builder()
                 .tipoTramite(solicitudDTO.getTipoTramite())
                 .vecinoEmail(solicitudDTO.getVecinoEmail())
+                .direccion(solicitudDTO.getDireccion())
+                .descripcion(solicitudDTO.getDescripcion())
                 .estado(EstadoSolicitud.INGRESADO) // Estado inicial por defecto
                 .build();
 
@@ -72,6 +74,8 @@ public class SolicitudServiceImpl implements SolicitudService {
                 .id(model.getId())
                 .tipoTramite(model.getTipoTramite())
                 .vecinoEmail(model.getVecinoEmail())
+                .direccion(model.getDireccion())
+                .descripcion(model.getDescripcion())
                 .estado(model.getEstado())
                 .fechaCreacion(model.getFechaCreacion())
                 .fechaActualizacion(model.getFechaActualizacion())
