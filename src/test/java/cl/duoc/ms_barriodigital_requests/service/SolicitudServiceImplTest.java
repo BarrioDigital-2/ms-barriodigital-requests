@@ -2,6 +2,7 @@ package cl.duoc.ms_barriodigital_requests.service;
 
 import cl.duoc.ms_barriodigital_requests.dto.EstadoUpdateDTO;
 import cl.duoc.ms_barriodigital_requests.dto.SolicitudDTO;
+import cl.duoc.ms_barriodigital_requests.messaging.SolicitudEventPublisher;
 import cl.duoc.ms_barriodigital_requests.model.EstadoSolicitud;
 import cl.duoc.ms_barriodigital_requests.model.SolicitudModel;
 import cl.duoc.ms_barriodigital_requests.repository.SolicitudRepository;
@@ -28,11 +29,14 @@ class SolicitudServiceImplTest {
     @Mock
     private SolicitudRepository solicitudRepository;
 
+    @Mock
+    private SolicitudEventPublisher eventPublisher;
+
     private SolicitudServiceImpl solicitudService;
 
     @BeforeEach
     void setUp() {
-        solicitudService = new SolicitudServiceImpl(solicitudRepository);
+        solicitudService = new SolicitudServiceImpl(solicitudRepository, eventPublisher);
     }
 
     @Test
@@ -40,8 +44,12 @@ class SolicitudServiceImplTest {
         SolicitudDTO request = SolicitudDTO.builder()
                 .tipoTramite("CERTIFICADO_RESIDENCIA")
                 .vecinoEmail("vecino@duocuc.cl")
+                .direccion("Av. Siempre Viva 123")
+                .descripcion("Visita para verificar domicilio")
                 .build();
         SolicitudModel saved = solicitud(1L, "CERTIFICADO_RESIDENCIA", "vecino@duocuc.cl", EstadoSolicitud.INGRESADO);
+        saved.setDireccion(request.getDireccion());
+        saved.setDescripcion(request.getDescripcion());
         when(solicitudRepository.save(any(SolicitudModel.class))).thenReturn(saved);
 
         SolicitudDTO result = solicitudService.crearSolicitud(request);
@@ -49,18 +57,27 @@ class SolicitudServiceImplTest {
         assertThat(result.getId()).isEqualTo(1L);
         assertThat(result.getTipoTramite()).isEqualTo("CERTIFICADO_RESIDENCIA");
         assertThat(result.getEstado()).isEqualTo(EstadoSolicitud.INGRESADO);
-        verify(solicitudRepository).save(any(SolicitudModel.class));
+        assertThat(result.getDireccion()).isEqualTo("Av. Siempre Viva 123");
+        assertThat(result.getDescripcion()).isEqualTo("Visita para verificar domicilio");
+        org.mockito.ArgumentCaptor<SolicitudModel> captor = org.mockito.ArgumentCaptor.forClass(SolicitudModel.class);
+        verify(solicitudRepository).save(captor.capture());
+        assertThat(captor.getValue().getDireccion()).isEqualTo(request.getDireccion());
+        assertThat(captor.getValue().getDescripcion()).isEqualTo(request.getDescripcion());
     }
 
     @Test
     void obtenerSolicitudPorIdDebeRetornarSolicitudExistente() {
         SolicitudModel model = solicitud(1L, "LICENCIA", "vecino@duocuc.cl", EstadoSolicitud.INGRESADO);
+        model.setDireccion("Calle Central 45");
+        model.setDescripcion("Requiere visita a terreno");
         when(solicitudRepository.findById(1L)).thenReturn(Optional.of(model));
 
         SolicitudDTO result = solicitudService.obtenerSolicitudPorId(1L);
 
         assertThat(result.getId()).isEqualTo(1L);
         assertThat(result.getTipoTramite()).isEqualTo("LICENCIA");
+        assertThat(result.getDireccion()).isEqualTo("Calle Central 45");
+        assertThat(result.getDescripcion()).isEqualTo("Requiere visita a terreno");
         verify(solicitudRepository).findById(1L);
     }
 
@@ -77,12 +94,16 @@ class SolicitudServiceImplTest {
     @Test
     void listarSolicitudesDebeFiltrarPorEstadoCuandoSeIndica() {
         SolicitudModel model = solicitud(1L, "LICENCIA", "vecino@duocuc.cl", EstadoSolicitud.ADMITIDO);
+        model.setDireccion("Calle Central 45");
+        model.setDescripcion("Requiere visita a terreno");
         when(solicitudRepository.findByEstado(EstadoSolicitud.ADMITIDO)).thenReturn(List.of(model));
 
         List<SolicitudDTO> result = solicitudService.listarSolicitudes(EstadoSolicitud.ADMITIDO);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getEstado()).isEqualTo(EstadoSolicitud.ADMITIDO);
+        assertThat(result.get(0).getDireccion()).isEqualTo("Calle Central 45");
+        assertThat(result.get(0).getDescripcion()).isEqualTo("Requiere visita a terreno");
         verify(solicitudRepository).findByEstado(EstadoSolicitud.ADMITIDO);
     }
 
