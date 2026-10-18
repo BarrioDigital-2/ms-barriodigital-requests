@@ -1,0 +1,56 @@
+# ========== EC2 DATOS: MySQL + ms-requests ==========
+# Uso (en la EC2, dentro de esta carpeta):
+#   cp .env.example .env    -> completar los valores
+#   docker compose up -d --build
+#
+# Las variables se leen del archivo .env de esta carpeta (no se sube a Git).
+
+name: barriodigital-datos
+
+services:
+  # ========== BASE DE DATOS ==========
+  mysql:
+    image: mysql:8.4
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Falta DB_ROOT_PASSWORD en .env}
+      MYSQL_DATABASE: ${DB_NAME:-barriodigital}
+      MYSQL_USER: ${DB_USERNAME:-barriodigital}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Falta DB_PASSWORD en .env}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    # Sin "ports": MySQL solo es accesible desde ms-requests (misma red de Docker), no desde afuera
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  # ========== MICROSERVICIO DE SOLICITUDES ==========
+  requests:
+    build: .
+    container_name: ms-requests
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-barriodigital}
+      DB_USERNAME: ${DB_USERNAME:-barriodigital}
+      DB_PASSWORD: ${DB_PASSWORD}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:?Falta AZURE_TENANT_ID en .env}
+      AZURE_API_CLIENT_ID: ${AZURE_API_CLIENT_ID:?Falta AZURE_API_CLIENT_ID en .env}
+      # IP PRIVADA de la EC2 de mensajeria (no cambia al reiniciar el lab)
+      RABBITMQ_HOST: ${RABBITMQ_HOST:?Falta RABBITMQ_HOST en .env}
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:?Falta RABBITMQ_USERNAME en .env}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Falta RABBITMQ_PASSWORD en .env}
+    ports:
+      - "8081:8081"
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
