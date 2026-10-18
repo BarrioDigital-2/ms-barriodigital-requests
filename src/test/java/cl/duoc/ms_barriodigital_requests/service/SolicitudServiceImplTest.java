@@ -2,6 +2,7 @@ package cl.duoc.ms_barriodigital_requests.service;
 
 import cl.duoc.ms_barriodigital_requests.dto.EstadoUpdateDTO;
 import cl.duoc.ms_barriodigital_requests.dto.SolicitudDTO;
+import cl.duoc.ms_barriodigital_requests.messaging.SolicitudEventPublisher;
 import cl.duoc.ms_barriodigital_requests.model.EstadoSolicitud;
 import cl.duoc.ms_barriodigital_requests.model.SolicitudModel;
 import cl.duoc.ms_barriodigital_requests.repository.SolicitudRepository;
@@ -28,11 +29,14 @@ class SolicitudServiceImplTest {
     @Mock
     private SolicitudRepository solicitudRepository;
 
+    @Mock
+    private SolicitudEventPublisher eventPublisher;
+
     private SolicitudServiceImpl solicitudService;
 
     @BeforeEach
     void setUp() {
-        solicitudService = new SolicitudServiceImpl(solicitudRepository);
+        solicitudService = new SolicitudServiceImpl(solicitudRepository, eventPublisher);
     }
 
     @Test
