@@ -2,9 +2,11 @@ package cl.duoc.ms_barriodigital_requests.service;
 
 import cl.duoc.ms_barriodigital_requests.dto.EstadoUpdateDTO;
 import cl.duoc.ms_barriodigital_requests.dto.SolicitudDTO;
+import cl.duoc.ms_barriodigital_requests.dto.SolicitudKafkaEvent;
 import cl.duoc.ms_barriodigital_requests.messaging.SolicitudCreadaEvent;
 import cl.duoc.ms_barriodigital_requests.messaging.SolicitudEstadoEvent;
 import cl.duoc.ms_barriodigital_requests.messaging.SolicitudEventPublisher;
+import cl.duoc.ms_barriodigital_requests.messaging.SolicitudKafkaPublisher;
 import cl.duoc.ms_barriodigital_requests.model.EstadoSolicitud;
 import cl.duoc.ms_barriodigital_requests.model.SolicitudModel;
 import cl.duoc.ms_barriodigital_requests.repository.SolicitudRepository;
@@ -21,11 +23,14 @@ public class SolicitudServiceImpl implements SolicitudService {
 
     private final SolicitudRepository solicitudRepository;
     private final SolicitudEventPublisher eventPublisher;
+    private final SolicitudKafkaPublisher kafkaPublisher;
 
     public SolicitudServiceImpl(SolicitudRepository solicitudRepository,
-                                SolicitudEventPublisher eventPublisher) {
+            SolicitudEventPublisher eventPublisher,
+            SolicitudKafkaPublisher kafkaPublisher) {
         this.solicitudRepository = solicitudRepository;
         this.eventPublisher = eventPublisher;
+        this.kafkaPublisher = kafkaPublisher;
     }
 
     @Override
@@ -40,11 +45,22 @@ public class SolicitudServiceImpl implements SolicitudService {
 
         SolicitudModel saved = solicitudRepository.save(model);
 
-        // Evento para ms-notifications (despues de guardar: asi el evento ya trae el id)
+        // Evento para ms-notifications (despues de guardar: asi el evento ya trae el
+        // id)
         eventPublisher.publicarSolicitudCreada(new SolicitudCreadaEvent(
                 saved.getId(),
                 saved.getTipoTramite(),
                 saved.getVecinoEmail(),
+                saved.getEstado().name(),
+                LocalDateTime.now().toString()));
+
+        // Evento para Kafka (streaming/auditoría)
+        kafkaPublisher.publicar(new SolicitudKafkaEvent(
+                saved.getId(),
+                "SOLICITUD_CREADA",
+                saved.getDireccion(), // comunaId — usa dirección por ahora
+                saved.getTipoTramite(),
+                saved.getDescripcion(),
                 saved.getEstado().name(),
                 LocalDateTime.now().toString()));
 
@@ -76,8 +92,9 @@ public class SolicitudServiceImpl implements SolicitudService {
 
         // Regla de negocio: no se puede pasar a EN_TERRENO sin antes pasar por ADMITIDO
         if (estadoUpdateDTO.getStatus() == EstadoSolicitud.EN_TERRENO &&
-            model.getEstado() != EstadoSolicitud.ADMITIDO) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede pasar a EN_TERRENO sin antes estar ADMITIDO");
+                model.getEstado() != EstadoSolicitud.ADMITIDO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "No se puede pasar a EN_TERRENO sin antes estar ADMITIDO");
         }
 
         EstadoSolicitud estadoAnterior = model.getEstado();
@@ -88,6 +105,16 @@ public class SolicitudServiceImpl implements SolicitudService {
         eventPublisher.publicarCambioEstado(new SolicitudEstadoEvent(
                 updated.getId(),
                 estadoAnterior.name(),
+                updated.getEstado().name(),
+                LocalDateTime.now().toString()));
+
+        // Evento para Kafka (streaming/auditoría)
+        kafkaPublisher.publicar(new SolicitudKafkaEvent(
+                updated.getId(),
+                "SOLICITUD_ACTUALIZADA",
+                updated.getDireccion(),
+                updated.getTipoTramite(),
+                updated.getDescripcion(),
                 updated.getEstado().name(),
                 LocalDateTime.now().toString()));
 
@@ -106,4 +133,5 @@ public class SolicitudServiceImpl implements SolicitudService {
                 .fechaActualizacion(model.getFechaActualizacion())
                 .build();
     }
+
 }
