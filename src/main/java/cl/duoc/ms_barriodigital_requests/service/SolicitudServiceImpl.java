@@ -14,8 +14,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -55,14 +57,18 @@ public class SolicitudServiceImpl implements SolicitudService {
                 LocalDateTime.now().toString()));
 
         // Evento para Kafka (streaming/auditoría)
-        kafkaPublisher.publicar(new SolicitudKafkaEvent(
-                saved.getId(),
-                "SOLICITUD_CREADA",
-                saved.getDireccion(), // comunaId — usa dirección por ahora
-                saved.getTipoTramite(),
-                saved.getDescripcion(),
-                saved.getEstado().name(),
-                LocalDateTime.now().toString()));
+        kafkaPublisher.publicar(SolicitudKafkaEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .tipo("SOLICITUD_CREADA")
+                .solicitudId(saved.getId())
+                .comunaId(saved.getDireccion())
+                .tipoTramite(saved.getTipoTramite())
+                .estadoAnterior(null)
+                .estado(saved.getEstado().name())
+                .usuario("anonimo")
+                .origen("ms-barriodigital-requests")
+                .timestamp(Instant.now().toString())
+                .build());
 
         return mapToDTO(saved);
     }
@@ -109,14 +115,18 @@ public class SolicitudServiceImpl implements SolicitudService {
                 LocalDateTime.now().toString()));
 
         // Evento para Kafka (streaming/auditoría)
-        kafkaPublisher.publicar(new SolicitudKafkaEvent(
-                updated.getId(),
-                "SOLICITUD_ACTUALIZADA",
-                updated.getDireccion(),
-                updated.getTipoTramite(),
-                updated.getDescripcion(),
-                updated.getEstado().name(),
-                LocalDateTime.now().toString()));
+        kafkaPublisher.publicar(SolicitudKafkaEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .tipo("ESTADO_CAMBIADO")
+                .solicitudId(updated.getId())
+                .comunaId(updated.getDireccion())
+                .tipoTramite(updated.getTipoTramite())
+                .estadoAnterior(estadoAnterior.name())
+                .estado(updated.getEstado().name())
+                .usuario("anonimo")
+                .origen("ms-barriodigital-requests")
+                .timestamp(Instant.now().toString())
+                .build());
 
         return mapToDTO(updated);
     }
