@@ -23,6 +23,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import cl.duoc.ms_barriodigital_requests.client.CatalogClient;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class SolicitudServiceImplTest {
@@ -35,12 +38,14 @@ class SolicitudServiceImplTest {
 
     @Mock
     private SolicitudKafkaPublisher kafkaPublisher;
+    @Mock
+    private CatalogClient catalogClient;
 
     private SolicitudServiceImpl solicitudService;
 
     @BeforeEach
     void setUp() {
-        solicitudService = new SolicitudServiceImpl(solicitudRepository, eventPublisher, kafkaPublisher);
+        solicitudService = new SolicitudServiceImpl(solicitudRepository, eventPublisher, kafkaPublisher, catalogClient);
     }
 
     @Test
@@ -156,4 +161,31 @@ class SolicitudServiceImplTest {
                 .estado(estado)
                 .build();
     }
+
+        @Test
+    void admitirDebeReservarCupoEnCatalog() {
+        SolicitudModel model = solicitud(1L, "PODA_ARBOLES", "vecino@duocuc.cl", EstadoSolicitud.INGRESADO);
+        when(solicitudRepository.findById(1L)).thenReturn(Optional.of(model));
+        when(solicitudRepository.save(any(SolicitudModel.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        solicitudService.actualizarEstado(1L, new EstadoUpdateDTO(EstadoSolicitud.ADMITIDO));
+
+        verify(catalogClient).reservarCupo("PODA_ARBOLES");
+    }
+
+    @Test
+    void siCatalogNoTieneCupoNoDebeAdmitir() {
+        SolicitudModel model = solicitud(1L, "PODA_ARBOLES", "vecino@duocuc.cl", EstadoSolicitud.INGRESADO);
+        when(solicitudRepository.findById(1L)).thenReturn(Optional.of(model));
+        doThrow(new ResponseStatusException(HttpStatus.CONFLICT, "Sin cupo"))
+                .when(catalogClient).reservarCupo("PODA_ARBOLES");
+
+        assertThatThrownBy(() -> solicitudService.actualizarEstado(1L, new EstadoUpdateDTO(EstadoSolicitud.ADMITIDO)))
+                .isInstanceOf(ResponseStatusException.class);
+
+        // El trámite sigue INGRESADO y nunca se guardó
+        assertThat(model.getEstado()).isEqualTo(EstadoSolicitud.INGRESADO);
+        verify(solicitudRepository, never()).save(any());
+    }
+
 }
