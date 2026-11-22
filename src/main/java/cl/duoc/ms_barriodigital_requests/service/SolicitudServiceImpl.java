@@ -10,6 +10,8 @@ import cl.duoc.ms_barriodigital_requests.messaging.SolicitudKafkaPublisher;
 import cl.duoc.ms_barriodigital_requests.model.EstadoSolicitud;
 import cl.duoc.ms_barriodigital_requests.model.SolicitudModel;
 import cl.duoc.ms_barriodigital_requests.repository.SolicitudRepository;
+import cl.duoc.ms_barriodigital_requests.client.CatalogClient;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -24,13 +26,16 @@ public class SolicitudServiceImpl implements SolicitudService {
     private final SolicitudRepository solicitudRepository;
     private final SolicitudEventPublisher eventPublisher;
     private final SolicitudKafkaPublisher kafkaPublisher;
+    private final CatalogClient catalogClient;
 
     public SolicitudServiceImpl(SolicitudRepository solicitudRepository,
             SolicitudEventPublisher eventPublisher,
-            SolicitudKafkaPublisher kafkaPublisher) {
+            SolicitudKafkaPublisher kafkaPublisher,
+            CatalogClient catalogClient) {
         this.solicitudRepository = solicitudRepository;
         this.eventPublisher = eventPublisher;
         this.kafkaPublisher = kafkaPublisher;
+        this.catalogClient = catalogClient;
     }
 
     @Override
@@ -97,9 +102,18 @@ public class SolicitudServiceImpl implements SolicitudService {
                     "No se puede pasar a EN_TERRENO sin antes estar ADMITIDO");
         }
 
-        EstadoSolicitud estadoAnterior = model.getEstado();
+                EstadoSolicitud estadoAnterior = model.getEstado();
+
+        // Al admitir, catalog debe tener cupo para este tipo de trámite.
+        // Si no hay, CatalogClient lanza una excepción y no se guarda nada
+        if (estadoAnterior == EstadoSolicitud.INGRESADO
+                && estadoUpdateDTO.getStatus() == EstadoSolicitud.ADMITIDO) {
+            catalogClient.reservarCupo(model.getTipoTramite());
+        }
+
         model.setEstado(estadoUpdateDTO.getStatus());
         SolicitudModel updated = solicitudRepository.save(model);
+
 
         // Evento para ms-notifications
         eventPublisher.publicarCambioEstado(new SolicitudEstadoEvent(
